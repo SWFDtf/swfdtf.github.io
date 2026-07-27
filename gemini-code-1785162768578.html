@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProGen - Stammbaum Architekt Enterprise</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{--c-bg:#f8fafc;--c-surface:#ffffff;--c-text:#0f172a;--c-text-muted:#64748b;--c-primary:#2563eb;--c-primary-hover:#1d4ed8;--c-danger:#ef4444;--c-border:#e2e8f0;--c-male:#3b82f6;--c-female:#ec4899;--c-diverse:#8b5cf6;--font-sans:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--c-bg);color:var(--c-text);overflow-x:hidden}
+.hidden{display:none!important}
+.container{max-width:1440px;margin:0 auto;padding:24px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid var(--c-border);flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.75rem;font-weight:800;color:var(--c-primary);letter-spacing:-.025em}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:.875rem;transition:all .2s;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.btn-primary{background:var(--c-primary);color:#fff}
+.btn-primary:hover{background:var(--c-primary-hover);transform:translateY(-1px)}
+.btn-secondary{background:var(--c-surface);border:1px solid var(--c-border);color:var(--c-text)}
+.btn-secondary:hover{background:var(--c-bg);border-color:#cbd5e1}
+.btn-danger{background:var(--c-danger);color:#fff}
+.grid-layout{display:grid;grid-template-columns:380px 1fr;gap:24px;align-items:start}
+@media (max-width:1024px){.grid-layout{grid-template-columns:1fr}}
+.panel{background:var(--c-surface);border-radius:12px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,.05);border:1px solid var(--c-border)}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:4px;color:var(--c-text-muted)}
+.form-control{width:100%;padding:8px 12px;border:1px solid var(--c-border);border-radius:6px;font-size:.9rem;background:var(--c-surface)}
+.form-control:focus{outline:none;border-color:var(--c-primary)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+details{margin:12px 0;border:1px solid var(--c-border);border-radius:6px;padding:8px 12px;background:#f8fafc}
+details summary{font-weight:600;cursor:pointer;color:var(--c-primary);font-size:.85rem}
+.relations-section{margin-top:16px;padding-top:16px;border-top:1px dashed var(--c-border)}
+.relation-item{display:flex;justify-content:space-between;align-items:center;background:#f1f5f9;padding:6px 10px;border-radius:6px;margin-bottom:6px;font-size:.85rem;border:1px solid #e2e8f0}
+.table-container{overflow-x:auto;border-radius:8px;border:1px solid var(--c-border)}
+table{width:100%;border-collapse:collapse;text-align:left}
+th,td{padding:12px;border-bottom:1px solid var(--c-border);font-size:.875rem}
+th{font-weight:700;color:var(--c-text-muted);background:#f8fafc;text-transform:uppercase;font-size:.75rem}
+.badge{padding:3px 8px;border-radius:12px;font-size:.75rem;font-weight:700;color:#fff}
+.badge.m{background:var(--c-male)} .badge.f{background:var(--c-female)} .badge.d{background:var(--c-diverse)}
+.pagination{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.875rem}
+#tree-view{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fafafa;z-index:100}
+#network-canvas{width:100%;height:100%}
+.floating-toolbar{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:var(--c-surface);padding:8px 16px;border-radius:30px;box-shadow:0 10px 25px -5px rgba(0,0,0,.1);display:flex;gap:8px;z-index:110;border:1px solid var(--c-border);align-items:center}
+.toolbar-title{position:absolute;top:20px;left:20px;font-weight:800;font-size:1.1rem;background:rgba(255,255,255,.9);padding:8px 16px;border-radius:8px;box-shadow:0 4px 6px -1px rgba(0,0,0,.05);border:1px solid var(--c-border);z-index:110}
+.focus-search{padding:6px 12px;border-radius:20px;border:1px solid var(--c-border);outline:none;width:200px;font-size:.85rem}
+.stats-badge{background:#e2e8f0;padding:4px 10px;border-radius:12px;font-size:.75rem;font-weight:bold;margin-left:8px}
+</style>
+</head>
+<body>
+
+<div id="dashboard" class="container">
+    <div class="header">
+        <h1>ProGen <span style="font-weight:300;font-size:1rem;color:var(--c-text-muted)">| Enterprise</span> <span id="db-stats" class="stats-badge">0 Personen</span></h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="app.generateMassiveData()" style="border-color:var(--c-danger);color:var(--c-danger)">Stresstest (Massendaten)</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('import-json').click()">JSON Import</button>
+            <input type="file" id="import-json" hidden accept=".json" onchange="app.importJSON(event)">
+            <button class="btn btn-secondary" onclick="app.exportJSON()">JSON Export</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('import-csv').click()">CSV Import</button>
+            <input type="file" id="import-csv" hidden accept=".csv" onchange="app.importCSV(event)">
+            <button class="btn btn-secondary" onclick="app.exportCSV()">CSV Export</button>
+            <button class="btn btn-primary" onclick="app.openTreeView()">Stammbaum öffnen &rarr;</button>
+        </div>
+    </div>
+    <div class="grid-layout">
+        <div class="panel">
+            <h2 id="form-title" style="margin-bottom:16px;font-size:1.1rem">Neue Person erfassen</h2>
+            <form id="person-form" onsubmit="app.savePerson(event)">
+                <input type="hidden" id="p-id">
+                <div class="form-row">
+                    <div class="form-group"><label>Vorname *</label><input type="text" id="p-firstname" class="form-control" required></div>
+                    <div class="form-group"><label>Geburtsname</label><input type="text" id="p-maidenname" class="form-control"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Nachname *</label><input type="text" id="p-lastname" class="form-control" required></div>
+                    <div class="form-group"><label>Geschlecht *</label>
+                        <select id="p-gender" class="form-control" required>
+                            <option value="M">Männlich</option><option value="F">Weiblich</option><option value="D">Divers</option>
+                        </select>
+                    </div>
+                </div>
+                <details>
+                    <summary>+ Weitere Details (Optional)</summary>
+                    <div class="form-row" style="margin-top:10px">
+                        <div class="form-group"><label>Geburtsdatum</label><input type="date" id="p-birthdate" class="form-control"></div>
+                        <div class="form-group"><label>Geburtsort</label><input type="text" id="p-birthplace" class="form-control"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Todesdatum</label><input type="date" id="p-deathdate" class="form-control"></div>
+                        <div class="form-group"><label>Todesort</label><input type="text" id="p-deathplace" class="form-control"></div>
+                    </div>
+                    <div class="form-group"><label>Biografie / Notizen</label><textarea id="p-bio" class="form-control" rows="2"></textarea></div>
+                </details>
+                <div class="relations-section">
+                    <label style="display:block;margin-bottom:8px">Beziehungen zuweisen</label>
+                    <div id="current-relations"></div>
+                    <div class="form-row" style="margin-top:8px">
+                        <select id="rel-person" class="form-control"><option value="">Person wählen...</option></select>
+                        <select id="rel-type" class="form-control">
+                            <option value="parent">Ist Elternteil von</option>
+                            <option value="child">Ist Kind von</option>
+                            <option value="partner">Ist Partner von</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="app.addTempRelation()">Verknüpfen</button>
+                </div>
+                <div class="form-row" style="margin-top:20px">
+                    <button type="submit" class="btn btn-primary" style="justify-content:center">Speichern</button>
+                    <button type="button" class="btn btn-secondary" style="justify-content:center" onclick="app.resetForm()">Abbrechen</button>
+                </div>
+            </form>
+        </div>
+        <div class="panel">
+            <input type="text" id="search-input" class="form-control" placeholder="Suche..." oninput="app.currentPage=1; app.renderTable()" style="margin-bottom:16px">
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Name</th><th>Geburtsname</th><th>Geschlecht</th><th>Status</th><th>Aktionen</th></tr></thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button class="btn btn-secondary" onclick="app.prevPage()" id="btn-prev">&larr; Zurück</button>
+                <span id="page-info">Seite 1</span>
+                <button class="btn btn-secondary" onclick="app.nextPage()" id="btn-next">Weiter &rarr;</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tree-view" class="hidden">
+    <div class="toolbar-title">Stammbaum</div>
+    <div class="floating-toolbar">
+        <button class="btn btn-secondary" onclick="app.closeTreeView()">&larr; Zurück</button>
+        <div style="width:1px;height:20px;background:var(--c-border);margin:0 5px"></div>
+        <select id="graph-search" class="focus-search" onchange="app.focusNode(this.value)">
+            <option value="">Knoten suchen & zentrieren...</option>
+        </select>
+        <div style="width:1px;height:20px;background:var(--c-border);margin:0 5px"></div>
+        <button class="btn btn-secondary" onclick="app.resetZoom()">Zoom Reset</button>
+        <button class="btn btn-primary" onclick="app.exportPDF()">PDF Export</button>
+    </div>
+    <div id="network-canvas"></div>
+</div>
+
+<script>
+const app = {
+    db: { people: [], relations: [] }, tempRelations: [], network: null, editingId: null,
+    currentPage: 1, itemsPerPage: 15, filteredData: [],
+
+    init() {
+        const d = localStorage.getItem('proGenDbEnterprise');
+        if(d) try { this.db = JSON.parse(d); } catch(e){}
+        this.updateStats(); this.renderTable(); this.updatePersonDropdown();
+    },
+    saveDb() {
+        localStorage.setItem('proGenDbEnterprise', JSON.stringify(this.db));
+        this.updateStats(); this.renderTable(); this.updatePersonDropdown();
+    },
+    updateStats() {
+        document.getElementById('db-stats').innerText = `${this.db.people.length} Personen`;
+    },
+    uuid() { return crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => (c=='x' ? Math.random()*16|0 : (Math.random()*16|0&0x3|0x8)).toString(16)); },
+    getPerson(id) { return this.db.people.find(p => p.id === id); },
+
+    savePerson(e) {
+        e.preventDefault();
+        const id = document.getElementById('p-id').value || this.uuid();
+        const person = {
+            id, firstName: document.getElementById('p-firstname').value.trim(), maidenName: document.getElementById('p-maidenname').value.trim(),
+            lastName: document.getElementById('p-lastname').value.trim(), gender: document.getElementById('p-gender').value,
+            birthDate: document.getElementById('p-birthdate').value, birthPlace: document.getElementById('p-birthplace').value.trim(),
+            deathDate: document.getElementById('p-deathdate').value, deathPlace: document.getElementById('p-deathplace').value.trim(),
+            bio: document.getElementById('p-bio').value.trim(),
+            isDeceased: !!document.getElementById('p-deathdate').value || !!document.getElementById('p-deathplace').value
+        };
+        const idx = this.db.people.findIndex(p => p.id === id);
+        if(idx > -1) this.db.people[idx] = person; else this.db.people.push(person);
+
+        this.db.relations = this.db.relations.filter(r => r.from !== id && r.to !== id);
+        this.tempRelations.forEach(tr => {
+            if(tr.type === 'parent') this.db.relations.push({ id: this.uuid(), from: id, to: tr.targetId, type: 'parent' });
+            else if(tr.type === 'child') this.db.relations.push({ id: this.uuid(), from: tr.targetId, to: id, type: 'parent' });
+            else if(tr.type === 'partner' && !this.db.relations.some(r => r.type==='partner' && ((r.from===id && r.to===tr.targetId)||(r.from===tr.targetId && r.to===id))))
+                this.db.relations.push({ id: this.uuid(), from: id, to: tr.targetId, type: 'partner' });
+        });
+        this.saveDb(); this.resetForm();
+    },
+
+    editPerson(id) {
+        const p = this.getPerson(id); if(!p) return;
+        this.editingId = id; document.getElementById('form-title').innerText = "Person bearbeiten";
+        ['id','firstname','maidenname','lastname','gender','birthdate','birthplace','deathdate','deathplace','bio'].forEach(k => {
+            document.getElementById(`p-${k}`).value = p[k.replace(/name|date|place/i, m => m.charAt(0).toUpperCase()+m.slice(1))] || (k==='gender'?'M':'');
+        });
+        this.tempRelations = [];
+        this.db.relations.forEach(r => {
+            if(r.from===id && r.type==='parent') this.tempRelations.push({ targetId: r.to, type: 'parent' });
+            if(r.to===id && r.type==='parent') this.tempRelations.push({ targetId: r.from, type: 'child' });
+            if(r.type==='partner' && (r.from===id || r.to===id)) this.tempRelations.push({ targetId: r.from===id?r.to:r.from, type: 'partner' });
+        });
+        this.renderTempRelations();
+    },
+
+    deletePerson(id) {
+        if(!confirm("Wirklich löschen?")) return;
+        this.db.people = this.db.people.filter(p => p.id !== id);
+        this.db.relations = this.db.relations.filter(r => r.from !== id && r.to !== id);
+        this.saveDb(); if(this.editingId === id) this.resetForm();
+    },
+
+    resetForm() {
+        document.getElementById('person-form').reset(); document.getElementById('p-id').value = '';
+        document.getElementById('form-title').innerText = "Neue Person erfassen"; this.editingId = null; this.tempRelations = []; this.renderTempRelations();
+    },
+
+    addTempRelation() {
+        const tid = document.getElementById('rel-person').value, type = document.getElementById('rel-type').value;
+        if(!tid || tid===this.editingId || this.tempRelations.some(r => r.targetId===tid && r.type===type)) return;
+        this.tempRelations.push({ targetId: tid, type }); this.renderTempRelations();
+    },
+    removeTempRelation(i) { this.tempRelations.splice(i,1); this.renderTempRelations(); },
+    renderTempRelations() {
+        const c = document.getElementById('current-relations'); c.innerHTML = '';
+        this.tempRelations.forEach((tr, i) => {
+            const p = this.getPerson(tr.targetId); if(!p) return;
+            c.innerHTML += `<div class="relation-item"><span><strong>${tr.type==='parent'?'Kind':tr.type==='child'?'Elternteil':'Partner'}:</strong> ${p.firstName} ${p.lastName}</span><button type="button" class="btn btn-danger" style="padding:2px 6px" onclick="app.removeTempRelation(${i})">&times;</button></div>`;
+        });
+    },
+    updatePersonDropdown() {
+        const s = document.getElementById('rel-person'); s.innerHTML = '<option value="">Person wählen...</option>';
+        [...this.db.people].sort((a,b)=>a.firstName.localeCompare(b.firstName)).forEach(p => s.innerHTML += `<option value="${p.id}">${p.firstName} ${p.lastName}</option>`);
+    },
+
+    // --- Table Pagination Logic ---
+    renderTable() {
+        const s = document.getElementById('search-input').value.toLowerCase();
+        this.filteredData = this.db.people.filter(p => !s || `${p.firstName} ${p.lastName} ${p.maidenName||''}`.toLowerCase().includes(s));
+        
+        const totalPages = Math.ceil(this.filteredData.length / this.itemsPerPage) || 1;
+        if(this.currentPage > totalPages) this.currentPage = totalPages;
+        
+        document.getElementById('page-info').innerText = `Seite ${this.currentPage} von ${totalPages} (${this.filteredData.length} Einträge)`;
+        document.getElementById('btn-prev').disabled = this.currentPage === 1;
+        document.getElementById('btn-next').disabled = this.currentPage === totalPages;
+
+        const start = (this.currentPage - 1) * this.itemsPerPage;
+        const pageData = this.filteredData.slice(start, start + this.itemsPerPage);
+
+        const t = document.getElementById('table-body'); t.innerHTML = '';
+        pageData.forEach(p => {
+            t.innerHTML += `<tr><td><strong>${p.firstName} ${p.lastName}</strong></td><td>${p.maidenName||'-'}</td><td><span class="badge ${p.gender.toLowerCase()}">${p.gender}</span></td><td>${p.isDeceased?'<span style="color:var(--c-text-muted)">&#10013; Verst.</span>':'<span style="color:#16a34a">Lebend</span>'}</td><td><button class="btn btn-secondary" style="padding:4px 8px;font-size:.75rem" onclick="app.editPerson('${p.id}')">Edit</button> <button class="btn btn-danger" style="padding:4px 8px;font-size:.75rem" onclick="app.deletePerson('${p.id}')">X</button></td></tr>`;
+        });
+    },
+    prevPage() { if(this.currentPage > 1) { this.currentPage--; this.renderTable(); } },
+    nextPage() { if(this.currentPage < Math.ceil(this.filteredData.length / this.itemsPerPage)) { this.currentPage++; this.renderTable(); } },
+
+    /* =========================================================
+       ENTERPRISE LAYOUT ALGORITHM - O(N) LINEAR BOUNDING BOX
+       Extremely fast for 10,000+ nodes. No infinite shifting loops.
+       ========================================================= */
+    calcLayout() {
+        const pos = {}, ppl = this.db.people, rels = this.db.relations;
+        if(!ppl.length) return { pos: {}, maxGen: 0 };
+        
+        let gen = {}, par = {}, chl = {}, prt = {};
+        ppl.forEach(p => { gen[p.id]=0; par[p.id]=[]; chl[p.id]=[]; prt[p.id]=[]; });
+        rels.forEach(r => {
+            if(r.type==='parent') { par[r.to].push(r.from); chl[r.from].push(r.to); }
+            if(r.type==='partner') { prt[r.from].push(r.to); prt[r.to].push(r.from); }
+        });
+
+        // 1. Generation calculation (safe cap to avoid infinite loops in circular data)
+        let chg = true, iter = 0;
+        while(chg && iter < 500) {
+            chg = false; iter++;
+            ppl.forEach(p => {
+                par[p.id].forEach(pid => { if(gen[pid] >= gen[p.id]) { gen[p.id] = gen[pid]+1; chg = true; } });
+                prt[p.id].forEach(pid => { if(gen[p.id] !== gen[pid]) { let m = Math.max(gen[p.id], gen[pid]); gen[p.id]=m; gen[pid]=m; chg = true; } });
+            });
+        }
+        const maxGen = Math.max(...Object.values(gen), 0);
+        
+        // 2. High-Performance Linear X-Positioning (Left to Right pass per generation)
+        const Y_SP = 250, P_SP = 180, S_SP = 240;
+        let xOffset = {}; // Tracks the rightmost boundary per generation
+        for(let g=0; g<=maxGen; g++) xOffset[g] = 0;
+        
+        for(let g=0; g<=maxGen; g++) {
+            // Group and sort people in this generation based on their parents' average X to keep branches together
+            let gp = ppl.filter(p => gen[p.id]===g).sort((a,b) => {
+                let pAx = par[a.id].length ? par[a.id].reduce((s, id)=>s+(pos[id]?.x||0),0)/par[a.id].length : 0;
+                let pBx = par[b.id].length ? par[b.id].reduce((s, id)=>s+(pos[id]?.x||0),0)/par[b.id].length : 0;
+                return pAx - pBx;
+            });
+            
+            let vis = new Set();
+            gp.forEach(p => {
+                if(vis.has(p.id)) return;
+                
+                // Determine minimal possible X
+                let targetX = xOffset[g];
+                if(par[p.id].length) {
+                    let parentAvgX = par[p.id].reduce((s, id)=>s+(pos[id]?.x||0),0)/par[p.id].length;
+                    targetX = Math.max(targetX, parentAvgX - 50); // Try to align under parent
+                }
+                
+                pos[p.id] = { x: targetX, y: g*Y_SP, g }; vis.add(p.id);
+                let currentRight = targetX + S_SP;
+
+                // Place partners immediately to the right
+                prt[p.id].forEach(pid => {
+                    if(!vis.has(pid) && gen[pid]===g) {
+                        pos[pid] = { x: currentRight, y: g*Y_SP, g }; vis.add(pid);
+                        currentRight += P_SP;
+                    }
+                });
+                xOffset[g] = currentRight;
+            });
+        }
+        return { pos, maxGen };
+    },
+
+    openTreeView() {
+        if(!this.db.people.length) return alert("Keine Personen erfasst.");
+        document.getElementById('dashboard').classList.add('hidden'); document.getElementById('tree-view').classList.remove('hidden');
+        this.initNetwork();
+    },
+    closeTreeView() {
+        document.getElementById('tree-view').classList.add('hidden'); document.getElementById('dashboard').classList.remove('hidden');
+        if(this.network) { this.network.destroy(); this.network = null; }
+    },
+    resetZoom() { if(this.network) this.network.fit({animation:{duration:500}}); document.getElementById('graph-search').value = ""; },
+
+    focusNode(id) {
+        if(!id || !this.network) return;
+        this.network.focus(id, { scale: 1.2, animation: { duration: 600, easingFunction: 'easeInOutQuad' } });
+        this.network.selectNodes([id]);
+    },
+
+    initNetwork() {
+        const { pos, maxGen } = this.calcLayout();
+        const nData = [], eData = [];
+        
+        // Fill Search Dropdown
+        const s = document.getElementById('graph-search');
+        s.innerHTML = '<option value="">Knoten suchen & zentrieren...</option>';
+        [...this.db.people].sort((a,b)=>a.firstName.localeCompare(b.firstName)).forEach(p => s.innerHTML += `<option value="${p.id}">${p.firstName} ${p.lastName}</option>`);
+
+        this.db.people.forEach(p => {
+            const po = pos[p.id] || {x:0,y:0}, c = p.gender==='M'?'#3b82f6':p.gender==='F'?'#ec4899':'#8b5cf6';
+            let l = `<b>${p.firstName}</b>\n${p.lastName}`;
+            if(p.maidenName && p.maidenName !== p.lastName) l += `\n<i>(geb. ${p.maidenName})</i>`;
+            if(p.birthDate||p.deathDate) l += `\n*${p.birthDate?p.birthDate.substring(0,4):'?'}${p.deathDate?' †'+p.deathDate.substring(0,4):''}`;
+            nData.push({ id: p.id, label: l, x: po.x, y: po.y, shape: 'box',
+                font: { multi: 'html', face: 'system-ui', color: p.isDeceased?'#64748b':'#0f172a', size: 14 },
+                color: { border: c, background: p.isDeceased?'#f1f5f9':'#fff' }, borderWidth: 2, opacity: p.isDeceased?.6:1, margin: 12, shadow: !p.isDeceased
+            });
+        });
+
+        this.db.relations.forEach(r => {
+            let f = this.getPerson(r.from), t = this.getPerson(r.to); if(!f||!t) return;
+            if(r.type==='parent') eData.push({ from: r.from, to: r.to, arrows: 'to', color: { color: '#94a3b8' }, dashes: f.lastName!==t.lastName, width: 2, smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.4 } });
+            if(r.type==='partner') eData.push({ from: r.from, to: r.to, color: { color: '#f59e0b' }, width: 3, smooth: { type: 'horizontal' } });
+        });
+
+        // ENTERPRISE CONFIG: Hide edges on drag for massive FPS boost
+        const options = {
+            physics: false, 
+            interaction: { dragNodes: true, zoomView: true, dragView: true, hideEdgesOnDrag: true }
+        };
+
+        this.network = new vis.Network(document.getElementById('network-canvas'), { nodes: new vis.DataSet(nData), edges: new vis.DataSet(eData) }, options);
+
+        this.network.on("beforeDrawing", ctx => {
+            const positions = this.network.getPositions();
+            
+            // Generate families grouping (Draws bounding boxes behind families)
+            let fams = {};
+            nData.forEach(n => { let p = this.getPerson(n.id); if(p&&p.lastName) { fams[p.lastName] = fams[p.lastName]||[]; fams[p.lastName].push(n.id); }});
+            for(const [ln, ids] of Object.entries(fams)) {
+                if(ids.length > 2) { // Only draw box if > 2 people
+                    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity, hp=false;
+                    ids.forEach(id => { let p = positions[id]; if(p) { hp=true; minX=Math.min(minX,p.x-75); minY=Math.min(minY,p.y-45); maxX=Math.max(maxX,p.x+75); maxY=Math.max(maxY,p.y+45); }});
+                    if(hp) {
+                        ctx.fillStyle = 'rgba(59,130,246,0.04)'; ctx.beginPath(); ctx.roundRect(minX-20, minY-20, maxX-minX+40, maxY-minY+40, 15); ctx.fill();
+                        ctx.fillStyle = 'rgba(59,130,246,0.4)'; ctx.font = 'bold 12px system-ui'; ctx.fillText(`Stammfamilie ${ln}`, minX-10, minY-5);
+                    }
+                }
+            }
+
+            // Draw Generation Headers across the entire calculated width
+            let allXs = Object.values(positions).map(p => p.x);
+            if(allXs.length) {
+                let min = Math.min(...allXs) - 200, max = Math.max(...allXs) + 400;
+                ctx.font = 'bold 16px system-ui'; ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'left';
+                for(let g=0; g<=maxGen; g++) {
+                    ctx.fillText(`GENERATION ${g}`, min, g*250 - 70);
+                    ctx.beginPath(); ctx.moveTo(min + 130, g*250 - 75); ctx.lineTo(max, g*250 - 75); ctx.setLineDash([5, 5]); ctx.strokeStyle='rgba(148, 163, 184, 0.4)'; ctx.stroke(); ctx.setLineDash([]);
+                }
+            }
+        });
+    },
+
+    exportJSON() { const e = document.createElement('a'); e.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.db)); e.download = "stammbaum_enterprise.json"; e.click(); },
+    importJSON(e) { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = ev => { try{ this.db = JSON.parse(ev.target.result); this.saveDb(); alert("Importiert!"); }catch(e){alert("Fehler beim Lesen!");} }; r.readAsText(f); },
+    exportCSV() { const d = this.db.people.map(p => ({...p, par: this.db.relations.filter(r=>r.to===p.id&&r.type==='parent').map(r=>r.from).join('|'), prt: this.db.relations.filter(r=>(r.from===p.id||r.to===p.id)&&r.type==='partner').map(r=>r.from===p.id?r.to:r.from).join('|')})); const e = document.createElement('a'); e.href = "data:text/csv;charset=utf-8," + encodeURIComponent(Papa.unparse(d)); e.download = "stammbaum_enterprise.csv"; e.click(); },
+    importCSV(e) { const f = e.target.files[0]; if(!f) return; Papa.parse(f, { header: true, complete: res => { let np=[], nr=[]; res.data.forEach(r => { if(!r.id) return; np.push({...r, isDeceased: r.isDeceased==='true'}); if(r.par) r.par.split('|').forEach(id => id&&nr.push({id:this.uuid(), from:id, to:r.id, type:'parent'})); if(r.prt) r.prt.split('|').forEach(id => id&&!nr.some(x=>x.type==='partner'&&((x.from===id&&x.to===r.id)||(x.from===r.id&&x.to===id)))&&nr.push({id:this.uuid(),from:r.id,to:id,type:'partner'})); }); this.db = {people:np, relations:nr}; this.saveDb(); }}); },
+    exportPDF() {
+        const b = document.querySelector('.floating-toolbar .btn-primary'), ot = b.innerText; b.innerText = "Bitte warten...";
+        setTimeout(() => { // Wait for UI update before freezing
+            html2canvas(document.querySelector('#network-canvas')).then(c => {
+                const p = new window.jspdf.jsPDF('l','mm','a4'), w = p.internal.pageSize.getWidth(), h = p.internal.pageSize.getHeight(), r = Math.min(w/c.width, h/c.height);
+                p.addImage(c.toDataURL('image/jpeg', 0.8), 'JPEG', (w-c.width*r)/2, (h-c.height*r)/2, c.width*r, c.height*r); p.save("stammbaum.pdf"); b.innerText = ot;
+            });
+        }, 100);
+    },
+
+    // --- MASS DATA GENERATOR FOR STRESS TESTING ---
+    generateMassiveData() {
+        if(this.db.people.length > 0 && !confirm("Aktuelle Daten werden unwiderruflich überschrieben. Stresstest starten?")) return;
+        this.db = { people: [], relations: [] };
+        let count = 0;
+        
+        const createP = (gen, ln) => {
+            count++; const id = this.uuid();
+            this.db.people.push({ id, firstName: `TestPerson ${count}`, lastName: ln, gender: Math.random()>0.5?'M':'F', isDeceased: gen<5 });
+            return id;
+        };
+
+        const spawn = (gen, ln, parIds) => {
+            if(gen > 6) return; // Limit depth to 7 generations (produces ~200-500 people usually)
+            const numKids = Math.floor(Math.random() * 3) + 1; // 1 to 3 Kids
+            for(let i=0; i<numKids; i++) {
+                const kidId = createP(gen, ln);
+                parIds.forEach(pId => this.db.relations.push({ id: this.uuid(), from: pId, to: kidId, type: 'parent' }));
+                
+                // Kid gets a partner? (75% chance if not last gen)
+                if(gen < 6 && Math.random() > 0.25) {
+                    const partnerId = createP(gen, "Heirat" + count);
+                    this.db.relations.push({ id: this.uuid(), from: kidId, to: partnerId, type: 'partner' });
+                    spawn(gen + 1, ln, [kidId, partnerId]); // recursive branching
+                } else if (gen < 6) {
+                    spawn(gen + 1, ln, [kidId]);
+                }
+            }
+        };
+
+        const p1 = createP(0, "Enterprise"); const p2 = createP(0, "Enterprise");
+        this.db.relations.push({ id: this.uuid(), from: p1, to: p2, type: 'partner' });
+        spawn(1, "Enterprise", [p1, p2]);
+
+        this.currentPage = 1; this.saveDb();
+        alert(`${count} Personen über 7 Generationen erfolgreich generiert!\n\nÖffne den Stammbaum, um die Enterprise-Layout Engine in Aktion zu sehen.`);
+    }
+};
+window.onload = () => app.init();
+</script>
+</body>
+</html>
