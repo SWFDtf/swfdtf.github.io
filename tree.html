@@ -455,6 +455,43 @@ const app = {
 
         this.currentPage = 1; this.saveDb();
         alert(`${count} Personen über 7 Generationen erfolgreich generiert!\n\nÖffne den Stammbaum, um die Enterprise-Layout Engine in Aktion zu sehen.`);
+    },
+    //Custom
+        generateCustomMassiveData(leng) {
+        if(this.db.people.length > 0 && !confirm("Aktuelle Daten werden unwiderruflich überschrieben. Stresstest starten?")) return;
+        this.db = { people: [], relations: [] };
+        let count = 0;
+        
+        const createP = (gen, ln) => {
+            count++; const id = this.uuid();
+            this.db.people.push({ id, firstName: `TestPerson ${count}`, lastName: ln, gender: Math.random()>0.5?'M':'F', isDeceased: gen<5 });
+            return id;
+        };
+
+        const spawn = (gen, ln, parIds, leng) => {
+            if(gen > leng) return; // Limit depth to 7 generations (produces ~200-500 people usually)
+            const numKids = Math.floor(Math.random() * 3) + 1; // 1 to 3 Kids
+            for(let i=0; i<numKids; i++) {
+                const kidId = createP(gen, ln);
+                parIds.forEach(pId => this.db.relations.push({ id: this.uuid(), from: pId, to: kidId, type: 'parent' }));
+                
+                // Kid gets a partner? (75% chance if not last gen)
+                if(gen < 6 && Math.random() > 0.25) {
+                    const partnerId = createP(gen, "Heirat" + count);
+                    this.db.relations.push({ id: this.uuid(), from: kidId, to: partnerId, type: 'partner' });
+                    spawn(gen + 1, ln, [kidId, partnerId]); // recursive branching
+                } else if (gen < 6) {
+                    spawn(gen + 1, ln, [kidId]);
+                }
+            }
+        };
+
+        const p1 = createP(0, "Enterprise"); const p2 = createP(0, "Enterprise");
+        this.db.relations.push({ id: this.uuid(), from: p1, to: p2, type: 'partner' });
+        spawn(1, "Enterprise", [p1, p2]);
+
+        this.currentPage = 1; this.saveDb();
+        alert(`${count} Personen über 7 Generationen erfolgreich generiert!\n\nÖffne den Stammbaum, um die Enterprise-Layout Engine in Aktion zu sehen.`);
     }
 };
 window.onload = () => app.init();
