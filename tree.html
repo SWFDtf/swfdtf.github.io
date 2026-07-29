@@ -476,11 +476,11 @@ const app = {
                 parIds.forEach(pId => this.db.relations.push({ id: this.uuid(), from: pId, to: kidId, type: 'parent' }));
                 
                 // Kid gets a partner? (75% chance if not last gen)
-                if(gen < 6 && Math.random() > 0.25) {
+                if(gen < leng && Math.random() > 0.25) {
                     const partnerId = createP(gen, "Heirat" + count);
                     this.db.relations.push({ id: this.uuid(), from: kidId, to: partnerId, type: 'partner' });
                     spawn(gen + 1, ln, [kidId, partnerId]); // recursive branching
-                } else if (gen < 6) {
+                } else if (gen < leng) {
                     spawn(gen + 1, ln, [kidId]);
                 }
             }
